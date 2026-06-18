@@ -81,6 +81,12 @@ function setupEventListeners() {
 
     // Post Tweet Button click
     postTweetBtn.addEventListener('click', submitTweet);
+
+    // Export to CSV Button
+    const exportCsvBtn = document.getElementById('exportCsvBtn');
+    if (exportCsvBtn) {
+        exportCsvBtn.addEventListener('click', exportFilteredToCSV);
+    }
 }
 
 // Fetch Release Notes from API
@@ -199,6 +205,12 @@ function renderReleaseNotes() {
                     <button class="btn btn-secondary btn-icon-only card-share-action" title="Tweet update" onclick="openTweetComposer('${note.id}')">
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                        </svg>
+                    </button>
+                    <button class="btn btn-secondary btn-icon-only card-share-action" title="Copy Content to Clipboard" onclick="copyCardContent('${note.id}')">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                         </svg>
                     </button>
                     <button class="btn btn-secondary btn-icon-only card-share-action" title="Copy Direct Link" onclick="copyDirectLink('${note.link}')">
@@ -369,4 +381,68 @@ function submitTweet() {
     window.open(intentUrl, '_blank', 'noopener,noreferrer');
     closeTweetModal();
     showToast("Opening X (Twitter)...");
+}
+
+// Copy Card Content
+window.copyCardContent = function(noteId) {
+    const note = releaseNotes.find(n => n.id === noteId);
+    if (!note) return;
+    
+    const textToCopy = `Google BigQuery ${note.type} Update (${note.date})\n\n${note.content_text}\n\nRead more: ${note.link}`;
+    
+    navigator.clipboard.writeText(textToCopy).then(() => {
+        showToast("Update content copied!");
+    }).catch(err => {
+        console.error("Clipboard copy failed:", err);
+        showToast("Failed to copy content.", "error");
+    });
+};
+
+// Export current filtered notes to CSV
+function exportFilteredToCSV() {
+    if (filteredNotes.length === 0) {
+        showToast("No updates to export.", "error");
+        return;
+    }
+    
+    // CSV Headers
+    const headers = ["ID", "Date", "Timestamp", "Type", "Content", "Link"];
+    
+    // Convert notes to CSV rows
+    const rows = filteredNotes.map(note => {
+        return [
+            note.id,
+            note.date,
+            note.timestamp,
+            note.type,
+            note.content_text,
+            note.link
+        ].map(val => {
+            // Escape double quotes and wrap in quotes
+            const escaped = String(val).replace(/"/g, '""');
+            return `"${escaped}"`;
+        }).join(",");
+    });
+    
+    // Join header and rows
+    const csvContent = [headers.join(","), ...rows].join("\n");
+    
+    // Create blob and download link
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    
+    // Set file name based on current filters/search
+    const filterName = currentFilter !== 'all' ? `-${currentFilter.toLowerCase()}` : '';
+    const searchName = currentSearchQuery ? `-${currentSearchQuery.replace(/[^a-z0-9]/gi, '_')}` : '';
+    const filename = `bigquery-release-notes${filterName}${searchName}.csv`;
+    
+    link.setAttribute("href", url);
+    link.setAttribute("download", filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    showToast(`Exported ${filteredNotes.length} updates to CSV!`);
 }
